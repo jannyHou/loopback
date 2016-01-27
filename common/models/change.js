@@ -4,6 +4,7 @@
 
 var PersistedModel = require('../../lib/loopback').PersistedModel;
 var loopback = require('../../lib/loopback');
+var utils = require('../../lib/utils');
 var crypto = require('crypto');
 var CJSON = {stringify: require('canonical-json')};
 var async = require('async');
@@ -77,6 +78,8 @@ module.exports = function(Change) {
     var Change = this;
     var errors = [];
 
+    callback = callback || utils.createPromiseCallback();
+
     var tasks = modelIds.map(function(id) {
       return function(cb) {
         Change.findOrCreateChange(modelName, id, function(err, change) {
@@ -96,7 +99,9 @@ module.exports = function(Change) {
     });
 
     async.parallel(tasks, function(err) {
-      if (err) return callback(err);
+      if (err) {
+        callback(err);
+      }
       if (errors.length) {
         var desc = errors
           .map(function(e) {
@@ -107,10 +112,11 @@ module.exports = function(Change) {
         var msg = 'Cannot rectify ' + modelName + ' changes:\n' + desc;
         err = new Error(msg);
         err.details = { errors: errors };
-        return callback(err);
+        callback(err);
       }
       callback();
     });
+    return callback.promise;
   };
 
   /**
@@ -138,11 +144,12 @@ module.exports = function(Change) {
 
   Change.findOrCreateChange = function(modelName, modelId, callback) {
     assert(loopback.findModel(modelName), modelName + ' does not exist');
+    callback = callback || utils.createPromiseCallback();
     var id = this.idForModel(modelName, modelId);
     var Change = this;
 
     this.findById(id, function(err, change) {
-      if (err) return callback(err);
+      if (err) callback(err);
       if (change) {
         callback(null, change);
       } else {
@@ -155,6 +162,7 @@ module.exports = function(Change) {
         Change.updateOrCreate(ch, callback);
       }
     });
+    return callback.promise;
   };
 
   /**
@@ -248,6 +256,7 @@ module.exports = function(Change) {
    */
 
   Change.prototype.currentRevision = function(cb) {
+    cb = cb || utils.createPromiseCallback();
     var model = this.getModelCtor();
     var id = this.getModelId();
     model.findById(id, function(err, inst) {
@@ -258,6 +267,7 @@ module.exports = function(Change) {
         cb(null, null);
       }
     });
+    return cb.promise;
   };
 
   /**
@@ -390,8 +400,11 @@ module.exports = function(Change) {
    */
 
   Change.diff = function(modelName, since, remoteChanges, callback) {
+    callback = callback || utils.createPromiseCallback();
+
     if (!Array.isArray(remoteChanges) || remoteChanges.length === 0) {
-      return callback(null, {deltas: [], conflicts: []});
+      callback(null, {deltas: [], conflicts: []});
+      return callback.promise;
     }
     var remoteChangeIndex = {};
     var modelIds = [];
@@ -455,6 +468,7 @@ module.exports = function(Change) {
         conflicts: conflicts
       });
     });
+    return callback.promise;
   };
 
   /**

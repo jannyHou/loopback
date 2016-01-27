@@ -82,6 +82,36 @@ describe('Change', function() {
     });
   });
 
+  describe('Change.rectifyModelChanges - promise variant', function() {
+    describe('using an existing untracked model', function() {
+      beforeEach(function(done) {
+        var test = this;
+        Change.rectifyModelChanges(this.modelName, [this.modelId])
+          .then(function(trackedChanges) {
+            done();
+          })
+          .catch(function(err) {
+            return done(err);
+          });
+      });
+
+      it('should create an entry', function(done) {
+        var test = this;
+        Change.find(function(err, trackedChanges) {
+          assert.equal(trackedChanges[0].modelId, test.modelId.toString());
+          done();
+        });
+      });
+
+      it('should only create one change', function(done) {
+        Change.count(function(err, count) {
+          assert.equal(count, 1);
+          done();
+        });
+      });
+    });
+  });
+
   describe('Change.findOrCreateChange(modelName, modelId, callback)', function() {
 
     describe('when a change doesnt exist', function() {
@@ -91,6 +121,29 @@ describe('Change', function() {
           if (err) return done(err);
           test.result = result;
           done();
+        });
+      });
+
+      it('should create an entry', function(done) {
+        var test = this;
+        Change.findById(this.result.id, function(err, change) {
+          if (err) return done(err);
+          assert.equal(change.id, test.result.id);
+          done();
+        });
+      });
+    });
+
+    describe('when a change doesnt exist - promise variant', function() {
+      beforeEach(function(done) {
+        var test = this;
+        Change.findOrCreateChange(this.modelName, this.modelId)
+        .then(function(result) {
+          test.result = result;
+          done();
+        })
+        .catch(function(err) {
+          return done(err);
         });
       });
 
@@ -234,6 +287,25 @@ describe('Change', function() {
     });
   });
 
+  describe('change.currentRevision - promise variant', function() {
+    it('should get the correct revision', function(done) {
+      var test = this;
+      var change = new Change({
+        modelName: this.modelName,
+        modelId: this.modelId
+      });
+
+      change.currentRevision()
+      .then(function(rev) {
+        assert.equal(rev, test.revisionForModel);
+        done();
+      })
+      .catch(function(err) {
+        done(err);
+      });
+    });
+  });
+
   describe('Change.hash(str)', function() {
     // todo(ritch) test other hashing algorithms
     it('should hash the given string', function() {
@@ -372,6 +444,27 @@ describe('Change', function() {
         assert.equal(diff.conflicts.length, 1);
         done();
       });
+    });
+
+    it('should return delta and conflict lists - promise variant', function(done) {
+      var remoteChanges = [
+        // an update => should result in a delta
+        {rev: 'foo2', prev: 'foo', modelName: this.modelName, modelId: 9, checkpoint: 1},
+        // no change => should not result in a delta / conflict
+        {rev: 'bar', prev: 'bar', modelName: this.modelName, modelId: 10, checkpoint: 1},
+        // a conflict => should result in a conflict
+        {rev: 'bat2', prev: 'bat0', modelName: this.modelName, modelId: 11, checkpoint: 1},
+      ];
+
+      Change.diff(this.modelName, 0, remoteChanges)
+        .then(function(diff) {
+          assert.equal(diff.deltas.length, 1);
+          assert.equal(diff.conflicts.length, 1);
+          done();
+        })
+        .catch(function(err) {
+          done(err);
+        });
     });
 
     it('should set "prev" to local revision in non-conflicting delta', function(done) {
